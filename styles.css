@@ -27,6 +27,9 @@
   --radius: 14px;
   --radius-lg: 22px;
   --maxw: 1280px;
+  /* aliases used by playground new components */
+  --accent: var(--cyan);
+  --fg-2: var(--fg-faint);
 }
 
 * { box-sizing: border-box; }

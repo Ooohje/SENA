@@ -8,11 +8,6 @@ function TechStack({ t, lang }) {
   return (
     <section data-screen-label="Tech stack">
       <div className="container">
-        <div className="section-head">
-          <span className="eyebrow">{t.techEyebrow}</span>
-          <h2 className="section-title text-grad">{t.techTitle}</h2>
-          <p className="sub">{t.techSubtitle}</p>
-        </div>
         <div className="tech-grid">
           {items.map((it, i) => (
             <div className="tech-card" key={i}>
