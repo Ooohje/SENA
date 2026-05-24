@@ -1,14 +1,9 @@
 // SENA — Frontend ↔ Backend adapter
 //
-// 백엔드 연결 방법:
-//   A) URL 파라미터:  playground.html?backend=https://xxxx.ngrok-free.app
-//      → localStorage 에 저장되어 이후 방문에도 유지됩니다.
-//   B) Playground 페이지 상단 "백엔드 URL 설정" 입력창에 직접 입력.
-//
-// 실제 백엔드 연결 시:
-//   1. server/start.bat 실행
-//   2. ngrok 퍼블릭 URL 복사 → 위 방법 중 하나로 입력
-//   3. 새로고침 — 자동으로 실제 API로 전환됩니다.
+// ★ 고정 백엔드 URL: ngrok 무료 고정 도메인을 아래에 입력하면
+//   모든 방문자가 자동으로 실제 백엔드에 연결됩니다.
+//   비워두면 Mock 모드로 동작합니다.
+const FIXED_BACKEND = "";  // 예: "https://sena-xyz.ngrok-free.app"
 
 (function () {
   try {
@@ -18,8 +13,12 @@
 })();
 
 function _base() {
-  try { return (localStorage.getItem("sena_backend") || "").replace(/\/$/, ""); }
-  catch (_) { return ""; }
+  // 우선순위: localStorage > FIXED_BACKEND > "" (Mock)
+  try {
+    const local = (localStorage.getItem("sena_backend") || "").replace(/\/$/, "");
+    if (local) return local;
+  } catch (_) {}
+  return (FIXED_BACKEND || "").replace(/\/$/, "");
 }
 
 window.SENA_CONFIG = {

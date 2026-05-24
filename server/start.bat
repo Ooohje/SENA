@@ -43,17 +43,28 @@ if %ERRORLEVEL% NEQ 0 (
 )
 echo [OK] qwen3:8b ready
 
-REM -- ngrok (optional) --
+REM -- ngrok --
+REM ★ 고정 도메인이 있으면 아래에 입력하세요 (dashboard.ngrok.com에서 발급)
+REM   예: set NGROK_DOMAIN=sena-xyz.ngrok-free.app
+set NGROK_DOMAIN=
+
 where ngrok >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [INFO] Starting ngrok on port 8000...
-    start /B "" ngrok http 8000
-    timeout /t 3 /nobreak >nul
-    curl -s http://localhost:4040/api/tunnels > "%~dp0ngrok_resp.json" 2>nul
-    for /f "delims=" %%U in ('python -c "import json; d=json.load(open(r'%~dp0ngrok_resp.json')); print(d['tunnels'][0]['public_url'])" 2^>nul') do set NGROK_URL=%%U
-    if not defined NGROK_URL set NGROK_URL=open http://localhost:4040 to see URL
+    if defined NGROK_DOMAIN (
+        echo [INFO] Starting ngrok with fixed domain: %NGROK_DOMAIN%
+        start /B "" ngrok http 8000 --domain=%NGROK_DOMAIN%
+        set NGROK_URL=https://%NGROK_DOMAIN%
+    ) else (
+        echo [INFO] Starting ngrok on port 8000...
+        start /B "" ngrok http 8000
+        timeout /t 3 /nobreak >nul
+        curl -s http://localhost:4040/api/tunnels > "%~dp0ngrok_resp.json" 2>nul
+        for /f "delims=" %%U in ('python -c "import json; d=json.load(open(r'%~dp0ngrok_resp.json')); print(d['tunnels'][0]['public_url'])" 2^>nul') do set NGROK_URL=%%U
+        if not defined NGROK_URL set NGROK_URL=open http://localhost:4040 to see URL
+    )
 ) else (
     echo [WARN] ngrok not installed - running local only
+    echo   Get ngrok at https://ngrok.com/download
     set NGROK_URL=ngrok not installed
 )
 
