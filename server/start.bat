@@ -8,55 +8,45 @@ echo   SENA Backend Server  ^|  RTX 5070 Ti
 echo ============================================
 echo.
 
-REM 式式 1. Python venv (optional) 式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式
-REM If you use a venv, activate it here. Example:
-REM call "%~dp0.venv\Scripts\activate.bat"
-
-REM 式式 2. ffmpeg check 式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式
+REM 1. ffmpeg check
 where ffmpeg >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] ffmpeg not found in PATH.
-    echo.
-    echo  Install: winget install ffmpeg
-    echo  Or download from: https://ffmpeg.org/download.html
-    echo.
+    echo [ERROR] ffmpeg not found. Install: winget install ffmpeg
     pause
     exit /b 1
 )
 echo [OK] ffmpeg found
 
-REM 式式 3. Ollama check / start 式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式
+REM 2. Ollama check / start
 curl -s --max-time 2 http://localhost:11434 >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo [INFO] Ollama not running - starting ollama serve...
+    echo [INFO] Starting Ollama...
     start "" ollama serve
     timeout /t 4 /nobreak >nul
 ) else (
-    echo [OK] Ollama already running
+    echo [OK] Ollama running
 )
 
-REM 式式 4. Check qwen3:8b model 式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式
+REM 3. Check qwen3:8b
 ollama list 2>nul | findstr "qwen3" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo.
-    echo [INFO] qwen3:8b not found - pulling now (may take a while)...
+    echo [INFO] Pulling qwen3:8b (first time only)...
     ollama pull qwen3:8b
 )
-echo [OK] qwen3:8b available
+echo [OK] qwen3:8b ready
 
-REM 式式 5. ngrok (background) 式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式
+REM 4. ngrok tunnel
 where ngrok >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo [INFO] Starting ngrok tunnel on port 8000...
-    start "" /B ngrok http 8000 --log=stdout > "%~dp0ngrok.log" 2>&1
+    echo [INFO] Starting ngrok on port 8000...
+    start /B "" ngrok http 8000
     timeout /t 3 /nobreak >nul
-    for /f "tokens=*" %%U in (
-        'curl -s http://localhost:4040/api/tunnels 2^>nul ^| python -c "import sys,json; d=json.load(sys.stdin); print(d[chr(34)+'tunnels'+chr(34)][0][chr(34)+'public_url'+chr(34)])" 2^>nul'
-    ) do set NGROK_URL=%%U
-    if not defined NGROK_URL set NGROK_URL=(could not read ngrok URL - check ngrok.log)
+    curl -s http://localhost:4040/api/tunnels > "%~dp0ngrok_resp.json" 2>nul
+    for /f "delims=" %%U in ('python -c "import json,sys; d=json.load(open(r'%~dp0ngrok_resp.json')); print(d['tunnels'][0]['public_url'])" 2^>nul') do set NGROK_URL=%%U
+    if not defined NGROK_URL set NGROK_URL=check http://localhost:4040
 ) else (
-    echo [WARN] ngrok not found. Install from https://ngrok.com/download
-    set NGROK_URL=(ngrok not running)
+    echo [WARN] ngrok not found. Get it at https://ngrok.com/download
+    set NGROK_URL=ngrok not installed
 )
 
 echo.
@@ -65,11 +55,12 @@ echo   Local  : http://localhost:8000
 echo   Public : %NGROK_URL%
 echo ============================================
 echo.
-echo Paste the Public URL into the Playground backend config field.
-echo Page: https://ooohje.github.io/SENA-page/playground.html
+echo Copy the Public URL and open:
+echo https://ooohje.github.io/SENA-page/playground.html
+echo Then paste it in the backend config field.
 echo.
 
-REM 式式 6. Start FastAPI 式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式式
+REM 5. Start FastAPI
 python main.py
 
 pause
