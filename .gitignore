@@ -1,0 +1,23 @@
+# Model weights (too large for GitHub)
+best_model/
+
+# Design extraction scratch folder
+design_extracted/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Server temp files
+server/audio_tmp/
+server/report_tmp/
+server/ngrok.log
+*.docx
+
+# OS
+.DS_Store
+Thumbs.db
