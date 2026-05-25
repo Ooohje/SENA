@@ -215,14 +215,16 @@ function PronDemo({ t, lang, serverStatus }) {
 
   const [scores, setScores] = useStateP({ art: 4.6, pro: 4.2, overall: 4.4 });
   const [feedbackList, setFeedbackList] = useStateP([t.feedback1, t.feedback2, t.feedback3]);
+  const [userText, setUserText] = useStateP("");
 
   const [playingOrig, setPlayingOrig] = useStateP(false);
   const [playingAi, setPlayingAi] = useStateP(false);
   const [progOrig, setProgOrig] = useStateP(0);
   const [progAi, setProgAi] = useStateP(0);
-  const playRefs = useRefP({ orig: null, ai: null });
+  const [audioUrl, setAudioUrl] = useStateP(null);
+  const [audioDuration, setAudioDuration] = useStateP(0);
+  const audioRef = useRefP(null);
 
-  const duration = 3.6;
   const waveOrig = useMemoP(() => makeWave(101, 110, 0.45), []);
   const waveAi   = useMemoP(() => makeWave(213, 110, 0.55), []);
 
@@ -239,29 +241,31 @@ function PronDemo({ t, lang, serverStatus }) {
     return () => clearInterval(tickRef.current);
   }, [state]);
 
-  useEffectP(() => {
-    if (!playingOrig) { clearInterval(playRefs.current.orig); return; }
-    playRefs.current.orig = setInterval(() => {
-      setProgOrig(p => {
-        const np = p + 0.1 / duration;
-        if (np >= 1) { setPlayingOrig(false); return 0; }
-        return np;
-      });
-    }, 100);
-    return () => clearInterval(playRefs.current.orig);
-  }, [playingOrig]);
-
-  useEffectP(() => {
-    if (!playingAi) { clearInterval(playRefs.current.ai); return; }
-    playRefs.current.ai = setInterval(() => {
-      setProgAi(p => {
-        const np = p + 0.1 / duration;
-        if (np >= 1) { setPlayingAi(false); return 0; }
-        return np;
-      });
-    }, 100);
-    return () => clearInterval(playRefs.current.ai);
-  }, [playingAi]);
+  function onAudioTimeUpdate() {
+    const a = audioRef.current;
+    if (!a || !a.duration) return;
+    const p = a.currentTime / a.duration;
+    setProgOrig(p); setProgAi(p);
+  }
+  function onAudioEnded() {
+    setPlayingOrig(false); setPlayingAi(false);
+    setProgOrig(0); setProgAi(0);
+  }
+  function onAudioLoaded() {
+    if (audioRef.current) setAudioDuration(audioRef.current.duration);
+  }
+  function toggleOrig() {
+    const a = audioRef.current;
+    if (!a || !audioUrl) return;
+    if (playingOrig) { a.pause(); setPlayingOrig(false); }
+    else { setPlayingAi(false); a.currentTime = 0; a.play().catch(() => {}); setPlayingOrig(true); }
+  }
+  function toggleAi() {
+    const a = audioRef.current;
+    if (!a || !audioUrl) return;
+    if (playingAi) { a.pause(); setPlayingAi(false); }
+    else { setPlayingOrig(false); a.currentTime = 0; a.play().catch(() => {}); setPlayingAi(true); }
+  }
 
   const startRec = async () => {
     elapsedRef.current = 0; setElapsed(0); setState("recording");
@@ -287,6 +291,9 @@ function PronDemo({ t, lang, serverStatus }) {
       const blob = await recorderRef.current.stop();
       if (!blob || blob.size === 0) throw new Error("empty");
       const result = await window.SENA_API.scorePronunciation(blob, t.sentence, lang);
+      if (audioUrl) URL.revokeObjectURL(audioUrl);
+      setAudioUrl(URL.createObjectURL(blob));
+      setUserText(result.userText || "");
       setScores({ art: result.articulation, pro: result.prosody, overall: result.overall });
       setFeedbackList(result.feedback);
       setState("done");
@@ -299,7 +306,13 @@ function PronDemo({ t, lang, serverStatus }) {
       }
     }
   };
-  const tryAgain = () => { setState("idle"); setProgOrig(0); setProgAi(0); setPlayingOrig(false); setPlayingAi(false); };
+  const tryAgain = () => {
+    const a = audioRef.current;
+    if (a) { a.pause(); a.currentTime = 0; }
+    setPlayingOrig(false); setPlayingAi(false);
+    setProgOrig(0); setProgAi(0);
+    setUserText(""); setState("idle");
+  };
   const onMicClick = () => {
     if (serverStatus !== "online") {
       alert(lang === "ko"
@@ -381,10 +394,14 @@ function PronDemo({ t, lang, serverStatus }) {
             </div>
           ) : (
             <div>
+              <audio ref={audioRef} src={audioUrl || ""}
+                onTimeUpdate={onAudioTimeUpdate} onEnded={onAudioEnded}
+                onLoadedMetadata={onAudioLoaded}
+                style={{ display: "none" }} />
               <Waveform data={waveOrig} isAi={false} playing={playingOrig} progress={progOrig}
-                onToggle={() => setPlayingOrig(p => !p)} duration={duration} t={t} />
+                onToggle={toggleOrig} duration={audioDuration} t={t} />
               <Waveform data={waveAi} isAi={true} playing={playingAi} progress={progAi}
-                onToggle={() => setPlayingAi(p => !p)} duration={duration} t={t} />
+                onToggle={toggleAi} duration={audioDuration} t={t} />
             </div>
           )}
         </div>
@@ -392,6 +409,12 @@ function PronDemo({ t, lang, serverStatus }) {
 
       {state === "done" && (
         <React.Fragment>
+          {userText && (
+            <div className="stt-result">
+              <span className="stt-label">{lang === "ko" ? "인식된 발화" : "Recognized speech"}</span>
+              <span className="stt-text">"{userText}"</span>
+            </div>
+          )}
           <div className="scores-row">
             <Gauge value={scores.art}     max={5} label={t.scoreArticulation} desc={t.scoreArticulationDesc} tag={tagArt.text} tagClass={tagArt.cls} />
             <Gauge value={scores.pro}     max={5} label={t.scoreProsody}      desc={t.scoreProsodyDesc}      tag={tagPro.text} tagClass={tagPro.cls} warm={scores.pro < 4.0} />
@@ -421,9 +444,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
   const [level, setLevel] = useStateP("int");
   const [topic, setTopic] = useStateP("opic");
   const [messages, setMessages] = useStateP([
-    { who: "ai",  text: t.ftMsg1AI },
-    { who: "you", text: t.ftMsg1You, score: { articulation: 4.5, prosody: 4.1 } },
-    { who: "ai",  text: t.ftMsg2AI },
+    { who: "ai", text: t.ftMsg1AI },
   ]);
   const [state, setState] = useStateP("idle"); // idle | listening | thinking | playing
   const [holdTime, setHoldTime] = useStateP(0);
@@ -439,11 +460,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
   const [showReport,  setShowReport]  = useStateP(false);
 
   useEffectP(() => {
-    setMessages([
-      { who: "ai",  text: t.ftMsg1AI },
-      { who: "you", text: t.ftMsg1You, score: { articulation: 4.5, prosody: 4.1 } },
-      { who: "ai",  text: t.ftMsg2AI },
-    ]);
+    setMessages([{ who: "ai", text: t.ftMsg1AI }]);
   }, [lang]);
 
   // auto-scroll chat
@@ -502,7 +519,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
       const blob = await recorderRef.current.stop();
       const turn = await window.SENA_API.chatTurn({
         level, topic,
-        history: messages.map(m => ({ role: m.who === "ai" ? "assistant" : "user", content: m.text })),
+        history: messages,
         audioBlob: blob,
         lang,
       });
@@ -534,11 +551,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
 
   const reset = async () => {
     await window.SENA_API.resetChat({ level, topic, lang }).catch(() => {});
-    setMessages([
-      { who: "ai",  text: t.ftMsg1AI },
-      { who: "you", text: t.ftMsg1You, score: { articulation: 4.5, prosody: 4.1 } },
-      { who: "ai",  text: t.ftMsg2AI },
-    ]);
+    setMessages([{ who: "ai", text: t.ftMsg1AI }]);
     setState("idle"); setHoldTime(0);
     setReportPhase("idle"); setReportData(null); setSessionId(null); setShowReport(false);
   };

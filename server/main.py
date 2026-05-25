@@ -397,11 +397,17 @@ async def score_pronunciation(
     lang:      str        = Form("ko"),
 ):
     wav = await _save_wav(audio)
+    user_text = ""
     try:
         result = G["evaluator"].predict(str(wav))
+        try:
+            user_text = G["stt"].transcribe(str(wav))
+        except Exception:
+            user_text = ""
     finally:
         wav.unlink(missing_ok=True)
     result["feedback"] = _feedback(result["articulation"], result["prosody"], lang)
+    result["userText"] = user_text
     return result
 
 
@@ -436,10 +442,13 @@ async def chat_turn(
                 raw.unlink(missing_ok=True)
                 wav.unlink(missing_ok=True)
 
-    # Build messages for Ollama
+    # Build messages for Ollama — accept both {who,text} and {role,content} formats
     messages = [{"role": "system", "content": _chat_system(level, topic)}]
     for m in hist:
-        messages.append({"role": "assistant" if m["who"] == "ai" else "user", "content": m["text"]})
+        if "role" in m:
+            messages.append({"role": m["role"], "content": m.get("content", m.get("text", ""))})
+        else:
+            messages.append({"role": "assistant" if m.get("who") == "ai" else "user", "content": m.get("text", "")})
     if user_text:
         messages.append({"role": "user", "content": user_text})
 
