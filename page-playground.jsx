@@ -263,17 +263,23 @@ function PronDemo({ t, lang, serverStatus }) {
     return () => clearInterval(playRefs.current.ai);
   }, [playingAi]);
 
-  const startRec = () => {
+  const startRec = async () => {
     elapsedRef.current = 0; setElapsed(0); setState("recording");
-    recorderRef.current = window.SENA_API.recorder(); recorderRef.current.start();
+    recorderRef.current = window.SENA_API.recorder();
+    await recorderRef.current.start();
   };
   const stopRec = async () => {
     setState("processing");
-    const blob = await recorderRef.current.stop();
-    const result = await window.SENA_API.scorePronunciation(blob, t.sentence, lang);
-    setScores({ art: result.articulation, pro: result.prosody, overall: result.overall });
-    setFeedbackList(result.feedback);
-    setState("done");
+    try {
+      const blob = await recorderRef.current.stop();
+      if (!blob || blob.size === 0) throw new Error("No audio captured");
+      const result = await window.SENA_API.scorePronunciation(blob, t.sentence, lang);
+      setScores({ art: result.articulation, pro: result.prosody, overall: result.overall });
+      setFeedbackList(result.feedback);
+      setState("done");
+    } catch (e) {
+      setState("idle");
+    }
   };
   const tryAgain = () => { setState("idle"); setProgOrig(0); setProgAi(0); setPlayingOrig(false); setPlayingAi(false); };
   const onMicClick = () => {
@@ -460,28 +466,30 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
     if (state !== "listening") return;
     clearInterval(holdRef.current);
     setState("thinking");
-    const blob = await recorderRef.current.stop();
-    const turn = await window.SENA_API.chatTurn({
-      level, topic,
-      history: messages.map(m => ({ role: m.who === "ai" ? "assistant" : "user", content: m.text })),
-      audioBlob: blob,
-      lang,
-    });
-    const newMessages = [
-      ...messages,
-      { who: "you", text: turn.userText, score: turn.utteranceScore },
-      { who: "ai",  text: turn.aiText, audioB64: turn.aiAudioBase64 || "" },
-    ];
-    setMessages(newMessages);
-
-    // TTS playback
-    if (turn.aiAudioBase64 && audioRef.current) {
-      setState("playing");
-      const src = turn.aiAudioBase64.startsWith("data:") ? turn.aiAudioBase64 : `data:audio/wav;base64,${turn.aiAudioBase64}`;
-      audioRef.current.src = src;
-      audioRef.current.play().catch(() => {});
-      audioRef.current.onended = () => setState("idle");
-    } else {
+    try {
+      const blob = await recorderRef.current.stop();
+      const turn = await window.SENA_API.chatTurn({
+        level, topic,
+        history: messages.map(m => ({ role: m.who === "ai" ? "assistant" : "user", content: m.text })),
+        audioBlob: blob,
+        lang,
+      });
+      const newMessages = [
+        ...messages,
+        { who: "you", text: turn.userText, score: turn.utteranceScore },
+        { who: "ai",  text: turn.aiText, audioB64: turn.aiAudioBase64 || "" },
+      ];
+      setMessages(newMessages);
+      if (turn.aiAudioBase64 && audioRef.current) {
+        setState("playing");
+        const src = turn.aiAudioBase64.startsWith("data:") ? turn.aiAudioBase64 : `data:audio/wav;base64,${turn.aiAudioBase64}`;
+        audioRef.current.src = src;
+        audioRef.current.play().catch(() => {});
+        audioRef.current.onended = () => setState("idle");
+      } else {
+        setState("idle");
+      }
+    } catch (e) {
       setState("idle");
     }
   };
