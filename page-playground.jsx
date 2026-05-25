@@ -1,0 +1,692 @@
+// SENA — Playground: tabbed (Pronunciation + AI Free-Talking)
+const { useState: useStateP, useEffect: useEffectP, useRef: useRefP, useMemo: useMemoP } = React;
+
+// ===== shared helpers =====
+function makeWave(seed, n = 80, base = 0.5) {
+  const out = [];
+  let s = seed;
+  for (let i = 0; i < n; i++) {
+    s = (s * 9301 + 49297) % 233280;
+    const r = s / 233280;
+    const env = Math.sin((i / n) * Math.PI);
+    const v = base + (r - 0.5) * 0.6 + Math.sin(i * 0.4) * 0.15;
+    out.push(Math.max(0.06, Math.min(1, v * (0.4 + env * 0.9))));
+  }
+  return out;
+}
+function fmt(sec) {
+  const s = Math.max(0, sec);
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  const ms = Math.floor((s % 1) * 100);
+  return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}.${String(ms).padStart(2, "0")}`;
+}
+
+
+// ===== BackendStatusBadge =====
+function BackendStatusBadge({ lang }) {
+  const ko = lang === "ko";
+  const [status, setStatus] = useStateP("checking"); // checking | online | offline
+
+  useEffectP(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const r = await fetch(window.SENA_CONFIG.backendUrl + "/health", { signal: AbortSignal.timeout(4000) });
+        if (!cancelled) setStatus(r.ok ? "online" : "offline");
+      } catch {
+        if (!cancelled) setStatus("offline");
+      }
+    }
+    check();
+    const id = setInterval(check, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const dot   = status === "online" ? "#10B981" : status === "offline" ? "#EF4444" : "#F59E0B";
+  const label = status === "online"
+    ? (ko ? "서버 연결됨" : "Server online")
+    : status === "offline"
+    ? (ko ? "서버 연결 안 됨" : "Server offline")
+    : (ko ? "연결 확인 중…" : "Checking…");
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12,
+                  color: "var(--fg-faint)", marginBottom: 16 }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot,
+                     boxShadow: `0 0 6px ${dot}`, display: "inline-block",
+                     animation: status === "checking" ? "pulse-dot 1.2s infinite" : "none" }} />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+// ===== ReportModal =====
+function ReportModal({ report, lang, sessionId, onClose }) {
+  const ko = lang === "ko";
+  const [tab, setTab] = useStateP("overall");
+
+  const tabs = [
+    { key: "overall",    label: ko ? "총평"   : "Summary"  },
+    { key: "grammar",    label: ko ? "문법"   : "Grammar"  },
+    { key: "vocabulary", label: ko ? "어휘"   : "Vocabulary" },
+    { key: "fluency",    label: ko ? "유창성" : "Fluency"  },
+  ];
+
+  async function downloadWord() {
+    try { await window.SENA_API.downloadReport(sessionId, lang); }
+    catch (e) { alert(e.message); }
+  }
+
+  return (
+    <div className="report-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="report-modal">
+        <div className="report-modal-head">
+          <span className="report-title">{ko ? "세션 리포트" : "Session Report"}</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="word-btn" onClick={downloadWord}>{ko ? "Word 다운로드" : "Download Word"}</button>
+            <button className="report-close-btn" onClick={onClose}>✕</button>
+          </div>
+        </div>
+        <div className="report-tabs">
+          {tabs.map(tb => (
+            <button key={tb.key} className={`report-tab ${tab === tb.key ? "active" : ""}`}
+              onClick={() => setTab(tb.key)}>{tb.label}</button>
+          ))}
+        </div>
+        <div className="report-body">
+          {tab === "overall" && (
+            <div className="report-section"><p style={{ lineHeight: 1.75 }}>{report.overall}</p></div>
+          )}
+          {tab === "grammar" && (
+            <div className="report-section">
+              {(report.grammar || []).map((g, i) => (
+                <div key={i} className="report-grammar-item">
+                  <div className="rgi-issue">{g.issue}</div>
+                  <div className="rgi-row"><span className="rgi-label">{ko ? "예시" : "Example"}</span><span className="rgi-example">{g.example}</span></div>
+                  <div className="rgi-row"><span className="rgi-label">{ko ? "수정" : "Fix"}</span><span className="rgi-correction">{g.correction}</span></div>
+                </div>
+              ))}
+              {!(report.grammar?.length) && <p className="report-empty">{ko ? "문법 피드백 없음" : "No grammar feedback"}</p>}
+            </div>
+          )}
+          {tab === "vocabulary" && (
+            <div className="report-section">
+              {(report.vocabulary || []).map((v, i) => (
+                <div key={i} className="report-vocab-item">
+                  <span className="rvi-dot">•</span><span>{v.suggestion}</span>
+                </div>
+              ))}
+              {!(report.vocabulary?.length) && <p className="report-empty">{ko ? "어휘 피드백 없음" : "No vocabulary feedback"}</p>}
+            </div>
+          )}
+          {tab === "fluency" && (
+            <div className="report-section">
+              <p style={{ lineHeight: 1.75 }}>{report.fluency?.notes || (ko ? "유창성 데이터 없음" : "No fluency data")}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Waveform =====
+function Waveform({ data, isAi, playing, progress, onToggle, duration, t }) {
+  return (
+    <div className="wave-card">
+      <div className="wave-head">
+        <div>
+          <div className="t">{isAi ? t.waveformCleaned : t.waveformOriginal}</div>
+          <div className="s" style={{ marginTop: 2 }}>{isAi ? t.waveformCleanedSub : t.waveformOriginalSub}</div>
+        </div>
+        <div className={`badge ${isAi ? "ai" : ""}`}>{isAi ? "AI" : "RAW"}</div>
+      </div>
+      <div className={`wave-box ${isAi ? "" : "original"}`}>
+        {data.map((v, i) => {
+          const past = (i / data.length) <= progress;
+          return (
+            <div key={i} className="bar" style={{ height: `${v * 80}%`, opacity: past ? 1 : (isAi ? 0.35 : 0.5) }}/>
+          );
+        })}
+        <div className="playhead" style={{ left: `${10 + progress * (100 - 10 - 2)}%` }}/>
+      </div>
+      <div className="wave-foot">
+        <button className={`play-btn ${isAi ? "ai" : ""}`} onClick={onToggle}>
+          <Icon name={playing ? "pause" : "play"} size={11} />
+          {playing ? t.pause : t.play}
+        </button>
+        <div className="wave-time">{fmt(progress * duration)} / {fmt(duration)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Gauge =====
+function Gauge({ value, max = 5, label, desc, tag, tagClass, warm }) {
+  const R = 64;
+  const C = 2 * Math.PI * R;
+  const pct = Math.max(0, Math.min(1, value / max));
+  const offset = C * (1 - pct);
+  return (
+    <div className="score-card">
+      <div className={`gauge ${warm ? "warm" : ""}`}>
+        <svg viewBox="0 0 160 160">
+          <defs>
+            <linearGradient id="gradCyan" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#22D3EE"/><stop offset="100%" stopColor="#06B6D4"/>
+            </linearGradient>
+            <linearGradient id="gradWarm" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#FBBF24"/><stop offset="100%" stopColor="#F59E0B"/>
+            </linearGradient>
+          </defs>
+          <circle className="track" cx="80" cy="80" r={R}/>
+          <circle className="fill" cx="80" cy="80" r={R} strokeDasharray={C} strokeDashoffset={offset}/>
+        </svg>
+        <div className="center">
+          <div>
+            <div className="vv">{value.toFixed(1)}</div>
+            <div className="vm">/ {max.toFixed(1)}</div>
+            {tag && <div className={`tag ${tagClass}`}>{tag}</div>}
+          </div>
+        </div>
+      </div>
+      <div>
+        <div className="name">{label}</div>
+        <div className="desc" style={{ marginTop: 6 }}>{desc}</div>
+      </div>
+    </div>
+  );
+}
+
+// ===== Pronunciation Demo =====
+function PronDemo({ t, lang }) {
+  const [state, setState] = useStateP("idle");
+  const [elapsed, setElapsed] = useStateP(0);
+  const elapsedRef = useRefP(0);
+  const tickRef = useRefP(null);
+  const recorderRef = useRefP(null);
+
+  const [scores, setScores] = useStateP({ art: 4.6, pro: 4.2, overall: 4.4 });
+  const [feedbackList, setFeedbackList] = useStateP([t.feedback1, t.feedback2, t.feedback3]);
+
+  const [playingOrig, setPlayingOrig] = useStateP(false);
+  const [playingAi, setPlayingAi] = useStateP(false);
+  const [progOrig, setProgOrig] = useStateP(0);
+  const [progAi, setProgAi] = useStateP(0);
+  const playRefs = useRefP({ orig: null, ai: null });
+
+  const duration = 3.6;
+  const waveOrig = useMemoP(() => makeWave(101, 110, 0.45), []);
+  const waveAi   = useMemoP(() => makeWave(213, 110, 0.55), []);
+
+  useEffectP(() => {
+    if (state === "recording") {
+      tickRef.current = setInterval(() => {
+        elapsedRef.current += 0.1;
+        setElapsed(elapsedRef.current);
+        if (elapsedRef.current >= 8) stopRec();
+      }, 100);
+    } else {
+      clearInterval(tickRef.current);
+    }
+    return () => clearInterval(tickRef.current);
+  }, [state]);
+
+  useEffectP(() => {
+    if (!playingOrig) { clearInterval(playRefs.current.orig); return; }
+    playRefs.current.orig = setInterval(() => {
+      setProgOrig(p => {
+        const np = p + 0.1 / duration;
+        if (np >= 1) { setPlayingOrig(false); return 0; }
+        return np;
+      });
+    }, 100);
+    return () => clearInterval(playRefs.current.orig);
+  }, [playingOrig]);
+
+  useEffectP(() => {
+    if (!playingAi) { clearInterval(playRefs.current.ai); return; }
+    playRefs.current.ai = setInterval(() => {
+      setProgAi(p => {
+        const np = p + 0.1 / duration;
+        if (np >= 1) { setPlayingAi(false); return 0; }
+        return np;
+      });
+    }, 100);
+    return () => clearInterval(playRefs.current.ai);
+  }, [playingAi]);
+
+  const startRec = () => {
+    elapsedRef.current = 0; setElapsed(0); setState("recording");
+    recorderRef.current = window.SENA_API.recorder(); recorderRef.current.start();
+  };
+  const stopRec = async () => {
+    setState("processing");
+    const blob = await recorderRef.current.stop();
+    const result = await window.SENA_API.scorePronunciation(blob, t.sentence, lang);
+    setScores({ art: result.articulation, pro: result.prosody, overall: result.overall });
+    setFeedbackList(result.feedback);
+    setState("done");
+  };
+  const tryAgain = () => { setState("idle"); setProgOrig(0); setProgAi(0); setPlayingOrig(false); setPlayingAi(false); };
+  const onMicClick = () => {
+    if (state === "idle" || state === "done") startRec();
+    else if (state === "recording") stopRec();
+  };
+
+  const overallTag   = scores.overall >= 4.3 ? t.overallExcellent : scores.overall >= 3.8 ? t.overallGood : t.overallNeedsWork;
+  const overallClass = scores.overall >= 4.3 ? "good" : scores.overall >= 3.8 ? "fair" : "warn";
+  const tagArt = scores.art >= 4.3 ? { text: t.overallExcellent, cls: "good" } : scores.art >= 3.8 ? { text: t.overallGood, cls: "fair" } : { text: t.overallNeedsWork, cls: "warn" };
+  const tagPro = scores.pro >= 4.3 ? { text: t.overallExcellent, cls: "good" } : scores.pro >= 3.8 ? { text: t.overallGood, cls: "fair" } : { text: t.overallNeedsWork, cls: "warn" };
+  const micLabel = state === "recording" ? t.micRecording : state === "processing" ? t.micProcessing : state === "done" ? t.micDone : t.micIdle;
+
+  return (
+    <div className="playground-shell">
+      <div className="pg-toolbar">
+        <div className="guest-badge"><span className="pulse"></span>{t.guestBadge}</div>
+        <div className="font-mono" style={{ display: "flex", gap: 14, alignItems: "center", fontSize: 11, color: "var(--fg-faint)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {window.SENA_CONFIG?.useRealBackend
+            ? <span><span style={{ color: "#10B981" }}>●</span> Live backend</span>
+            : <span><span style={{ color: "var(--cyan-soft)" }}>●</span> Scoring engine v2.4.1</span>}
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span>{t.permissionNotice}</span>
+        </div>
+      </div>
+
+      <div className="sentence-card">
+        <div className="label">{t.sentenceLabel}</div>
+        <div className="text">{t.sentence}</div>
+        <div className="text-ko">{t.sentenceKo}</div>
+        <div className="phon">/aɪ hæd ˈkɔːfi wɪð maɪ frɛnd ˈjɛstərdeɪ/</div>
+      </div>
+
+      <div className="pg-grid">
+        <div className="recorder-card">
+          <div className="mic-wrap">
+            <div className="mic-ring"></div>
+            <div className="mic-ring r2"></div>
+            <div className="mic-ring r3"></div>
+            <button
+              className={`mic-btn ${state === "recording" ? "recording" : ""} ${state === "processing" ? "processing" : ""}`}
+              onClick={onMicClick}
+              disabled={state === "processing"}>
+              {state === "recording" ? <Icon name="stop" size={42} /> :
+               state === "processing" ? <Icon name="spark" size={42} /> :
+               <Icon name="mic" size={48} />}
+            </button>
+          </div>
+          <div className={`mic-status ${state === "recording" ? "rec" : ""}`}>
+            <span className="dot"></span>{micLabel}
+          </div>
+          <div className="mic-timer">{fmt(elapsed)}</div>
+          <div className="mic-help">
+            {state === "idle"       && t.permissionNotice}
+            {state === "recording"  && (lang === "ko" ? "또박또박 천천히 읽어주세요." : "Read clearly at a steady pace.")}
+            {state === "processing" && (lang === "ko" ? "음운·운율을 분석하는 중입니다…" : "Modeling phonemes and prosody…")}
+            {state === "done"       && (lang === "ko" ? "분석이 완료되었습니다. 결과를 확인하세요." : "Analysis complete. Review on the right →")}
+          </div>
+        </div>
+
+        <div>
+          {state !== "done" ? (
+            <div className="pg-empty">
+              <div className="glyph">
+                {state === "processing" ? <Icon name="spark" size={20}/> : <Icon name="mic" size={20}/>}
+              </div>
+              <div style={{ fontWeight: 500, color: "var(--fg)" }}>
+                {state === "recording"  ? (lang === "ko" ? "녹음이 진행 중입니다" : "Recording in progress")
+                : state === "processing" ? (lang === "ko" ? "잠시만요, AI가 분석하고 있어요" : "Hang on, the AI is analyzing")
+                :                          (lang === "ko" ? "마이크 버튼을 눌러 시작" : "Tap the mic to begin")}
+              </div>
+              <div style={{ color: "var(--fg-faint)", fontSize: 12.5 }}>
+                {lang === "ko" ? "원본 / 정제 파형과 점수가 여기에 표시됩니다." : "Waveforms and scores will appear here."}
+              </div>
+            </div>
+          ) : (
+            <div>
+              <Waveform data={waveOrig} isAi={false} playing={playingOrig} progress={progOrig}
+                onToggle={() => setPlayingOrig(p => !p)} duration={duration} t={t} />
+              <Waveform data={waveAi} isAi={true} playing={playingAi} progress={progAi}
+                onToggle={() => setPlayingAi(p => !p)} duration={duration} t={t} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {state === "done" && (
+        <React.Fragment>
+          <div className="scores-row">
+            <Gauge value={scores.art}     max={5} label={t.scoreArticulation} desc={t.scoreArticulationDesc} tag={tagArt.text} tagClass={tagArt.cls} />
+            <Gauge value={scores.pro}     max={5} label={t.scoreProsody}      desc={t.scoreProsodyDesc}      tag={tagPro.text} tagClass={tagPro.cls} warm={scores.pro < 4.0} />
+            <Gauge value={scores.overall} max={5} label={t.overallScore}      desc={lang === "ko" ? "두 지표의 종합 평균" : "Weighted average of both"} tag={overallTag} tagClass={overallClass} />
+          </div>
+          <div className="feedback">
+            <div className="ftitle"><span className="dot"></span>{t.feedbackTitle}</div>
+            <ul>
+              {feedbackList.map((f, i) => (
+                <li key={i}><span className="idx">{String(i + 1).padStart(2, "0")}</span><span>{f}</span></li>
+              ))}
+            </ul>
+            <div className="feedback-actions">
+              <button className="btn-ghost" onClick={tryAgain}><Icon name="refresh" size={14}/>{t.tryAgain}</button>
+              <button className="btn-ghost"><Icon name="save" size={14}/>{t.saveSession}</button>
+            </div>
+          </div>
+        </React.Fragment>
+      )}
+    </div>
+  );
+}
+
+// ===== Free Talking Demo =====
+function FreeTalkDemo({ t, lang }) {
+  const ko = lang === "ko";
+  const [level, setLevel] = useStateP("int");
+  const [topic, setTopic] = useStateP("opic");
+  const [messages, setMessages] = useStateP([
+    { who: "ai",  text: t.ftMsg1AI },
+    { who: "you", text: t.ftMsg1You, score: { articulation: 4.5, prosody: 4.1 } },
+    { who: "ai",  text: t.ftMsg2AI },
+  ]);
+  const [state, setState] = useStateP("idle"); // idle | listening | thinking | playing
+  const [holdTime, setHoldTime] = useStateP(0);
+  const holdRef = useRefP(null);
+  const recorderRef = useRefP(null);
+  const audioRef = useRefP(null);
+  const chatBodyRef = useRefP(null);
+
+  // Report state
+  const [reportPhase, setReportPhase] = useStateP("idle"); // idle | generating | done
+  const [reportData,  setReportData]  = useStateP(null);
+  const [sessionId,   setSessionId]   = useStateP(null);
+  const [showReport,  setShowReport]  = useStateP(false);
+
+  useEffectP(() => {
+    setMessages([
+      { who: "ai",  text: t.ftMsg1AI },
+      { who: "you", text: t.ftMsg1You, score: { articulation: 4.5, prosody: 4.1 } },
+      { who: "ai",  text: t.ftMsg2AI },
+    ]);
+  }, [lang]);
+
+  // auto-scroll chat
+  useEffectP(() => {
+    if (chatBodyRef.current) chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+  }, [messages, state]);
+
+  const topicChips = [
+    { id: "opic",      label: t.topicOpic },
+    { id: "free",      label: t.topicFree },
+    { id: "biz",       label: t.topicBiz },
+    { id: "travel",    label: t.topicTravel },
+    { id: "interview", label: t.topicInterview },
+    { id: "daily",     label: t.topicDaily },
+  ];
+  const levelChips = [
+    { id: "beg", label: t.levelBeg },
+    { id: "int", label: t.levelInt },
+    { id: "adv", label: t.levelAdv },
+  ];
+
+  const onMicDown = async () => {
+    if (state !== "idle") return;
+    setState("listening");
+    setHoldTime(0);
+    holdRef.current = setInterval(() => setHoldTime(h => h + 0.1), 100);
+    recorderRef.current = window.SENA_API.recorder();
+    await recorderRef.current.start();
+  };
+
+  const onMicUp = async () => {
+    if (state !== "listening") return;
+    clearInterval(holdRef.current);
+    setState("thinking");
+    const blob = await recorderRef.current.stop();
+    const turn = await window.SENA_API.chatTurn({
+      level, topic,
+      history: messages.map(m => ({ role: m.who === "ai" ? "assistant" : "user", content: m.text })),
+      audioBlob: blob,
+      lang,
+    });
+    const newMessages = [
+      ...messages,
+      { who: "you", text: turn.userText, score: turn.utteranceScore },
+      { who: "ai",  text: turn.aiText, audioB64: turn.aiAudioBase64 || "" },
+    ];
+    setMessages(newMessages);
+
+    // TTS playback
+    if (turn.aiAudioBase64 && audioRef.current) {
+      setState("playing");
+      const src = turn.aiAudioBase64.startsWith("data:") ? turn.aiAudioBase64 : `data:audio/wav;base64,${turn.aiAudioBase64}`;
+      audioRef.current.src = src;
+      audioRef.current.play().catch(() => {});
+      audioRef.current.onended = () => setState("idle");
+    } else {
+      setState("idle");
+    }
+  };
+
+  function replayAudio(b64) {
+    if (!audioRef.current || !b64) return;
+    audioRef.current.src = b64.startsWith("data:") ? b64 : `data:audio/wav;base64,${b64}`;
+    audioRef.current.play().catch(() => {});
+  }
+
+  const reset = async () => {
+    await window.SENA_API.resetChat({ level, topic, lang }).catch(() => {});
+    setMessages([
+      { who: "ai",  text: t.ftMsg1AI },
+      { who: "you", text: t.ftMsg1You, score: { articulation: 4.5, prosody: 4.1 } },
+      { who: "ai",  text: t.ftMsg2AI },
+    ]);
+    setState("idle"); setHoldTime(0);
+    setReportPhase("idle"); setReportData(null); setSessionId(null); setShowReport(false);
+  };
+
+  async function endSession() {
+    const userTurns = messages.filter(m => m.who === "you");
+    if (userTurns.length < 1) return;
+    setReportPhase("generating");
+    setShowReport(true);
+    try {
+      const history = messages.map(m => ({ role: m.who === "ai" ? "assistant" : "user", content: m.text }));
+      const res = await window.SENA_API.generateReport({ history, lang });
+      setSessionId(res.sessionId);
+      setReportData(res.report);
+      setReportPhase("done");
+    } catch (e) {
+      setReportPhase("idle"); setShowReport(false);
+      alert((ko ? "리포트 생성 실패: " : "Report failed: ") + e.message);
+    }
+  }
+
+  const userTurnCount = messages.filter(m => m.who === "you").length;
+  const promptText = ko
+    ? <>당신은 한국인 학습자와 음성으로 대화하는 AI 영어 튜터입니다. 학습자 레벨은 <b>{levelChips.find(c => c.id === level).label}</b>, 오늘의 주제는 <b>{topicChips.find(c => c.id === topic).label}</b>입니다. 자연스러운 후속 질문을 던지세요.</>
+    : <>You are an AI English voice tutor for a Korean learner. Learner level: <b>{levelChips.find(c => c.id === level).label}</b>. Today's topic: <b>{topicChips.find(c => c.id === topic).label}</b>. Ask natural follow-up questions.</>;
+
+  return (
+    <div className="playground-shell">
+      <div className="pg-toolbar">
+        <div className="guest-badge"><span className="pulse"></span>{t.guestBadge}</div>
+        <div className="font-mono" style={{ display: "flex", gap: 14, alignItems: "center", fontSize: 11, color: "var(--fg-faint)", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+          {window.SENA_CONFIG?.useRealBackend
+            ? <span><span style={{ color: "#10B981" }}>●</span> Live · Qwen3-8B · GPU</span>
+            : <span><span style={{ color: "var(--cyan-soft)" }}>●</span> Qwen3-8B · in-house GPU</span>}
+          <span style={{ opacity: 0.5 }}>·</span>
+          <span>{t.permissionNotice}</span>
+        </div>
+      </div>
+
+      <div className="ft-grid">
+        {/* Left: pickers + system prompt */}
+        <div className="ft-left">
+          <div className="ft-pick">
+            <div className="ft-pick-label">{t.ftLevelLabel}</div>
+            <div className="ft-level-row">
+              {levelChips.map(c => (
+                <button key={c.id} className={`ft-lv-btn ${level === c.id ? "active" : ""}`}
+                  onClick={() => setLevel(c.id)}>{c.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="ft-pick">
+            <div className="ft-pick-label">{t.ftTopicLabel}</div>
+            <div className="ft-topic-row">
+              {topicChips.map(c => (
+                <button key={c.id} className={`ft-chip ${topic === c.id ? "active" : ""}`}
+                  onClick={() => setTopic(c.id)}>{c.label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="ft-prompt-card">
+            <div className="ft-prompt-head">
+              <span className="font-mono" style={{ fontSize: 10.5, letterSpacing: "0.14em", color: "var(--cyan-ink)", textTransform: "uppercase" }}>
+                &lt;{t.ftSystemPrompt}&gt;
+              </span>
+              <span className="font-mono" style={{ fontSize: 10.5, color: "var(--fg-faint)" }}>Qwen3-8B · fine-tuned</span>
+            </div>
+            <div className="ft-prompt-body">{promptText}</div>
+          </div>
+        </div>
+
+        {/* Right: chat */}
+        <div className="ft-right">
+          <div className="ft-chat-head">
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="ft-avatar"><Icon name="chat" size={14}/></div>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: 14 }}>SENA Tutor</div>
+                <div style={{ fontSize: 11.5, color: "var(--fg-faint)", fontFamily: "JetBrains Mono, monospace" }}>
+                  {levelChips.find(c => c.id === level).label} · {topicChips.find(c => c.id === topic).label}
+                </div>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button className="btn-ghost" style={{ padding: "6px 12px", fontSize: 12 }} onClick={reset}>
+                <Icon name="refresh" size={12}/>{t.ftReset}
+              </button>
+              <button
+                className="end-session-btn"
+                onClick={endSession}
+                disabled={userTurnCount < 1 || reportPhase === "generating"}
+                title={ko ? "대화 리포트 생성" : "Generate session report"}
+              >
+                {reportPhase === "generating" ? (ko ? "생성 중…" : "Generating…") : (ko ? "세션 리포트" : "Session Report")}
+              </button>
+            </div>
+          </div>
+
+          <div className="ft-chat-body" ref={chatBodyRef}>
+            {messages.map((m, i) => (
+              <div key={i} className={`ft-msg ${m.who}`}>
+                <div className="ft-msg-meta">{m.who === "ai" ? t.ftAI : t.ftYou}</div>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+                  <div className="ft-msg-bubble">{m.text}</div>
+                  {m.who === "ai" && m.audioB64 && (
+                    <button className="ft-ai-replay" title={ko ? "다시 듣기" : "Replay"} onClick={() => replayAudio(m.audioB64)}>▶</button>
+                  )}
+                </div>
+                {m.who === "you" && m.score && (
+                  <div className="ft-utter-score">
+                    <span className="font-mono" style={{ fontSize: 10, letterSpacing: "0.1em", color: "var(--fg-faint)", textTransform: "uppercase" }}>{t.ftScoringLabel}</span>
+                    <span className="ft-sscore">{t.ftArt} <b>{m.score.articulation.toFixed(1)}</b></span>
+                    <span className="ft-sscore">{t.ftPro} <b>{m.score.prosody.toFixed(1)}</b></span>
+                  </div>
+                )}
+              </div>
+            ))}
+            {(state === "thinking" || state === "playing") && (
+              <div className="ft-msg ai">
+                <div className="ft-msg-meta">{t.ftAI}</div>
+                <div className="ft-msg-bubble thinking">
+                  <span></span><span></span><span></span>
+                  <span style={{ marginLeft: 6, color: "var(--fg-faint)", fontSize: 12 }}>
+                    {state === "playing" ? (ko ? "음성 재생 중…" : "Playing audio…") : t.ftThinking}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="ft-chat-foot">
+            <div className="ft-mic-wrap">
+              <button
+                className={`ft-mic-btn ${state === "listening" ? "active" : ""}`}
+                onMouseDown={onMicDown}
+                onMouseUp={onMicUp}
+                onMouseLeave={state === "listening" ? onMicUp : undefined}
+                onTouchStart={e => { e.preventDefault(); onMicDown(); }}
+                onTouchEnd={e => { e.preventDefault(); onMicUp(); }}
+                disabled={state === "thinking" || state === "playing"}>
+                <Icon name={state === "listening" ? "stop" : "mic"} size={20}/>
+              </button>
+              <div>
+                <div className="ft-mic-label">
+                  {state === "listening" ? `${t.ftListening} ${holdTime.toFixed(1)}s` :
+                   state === "thinking"  ? t.ftThinking :
+                   state === "playing"   ? (ko ? "재생 중…" : "Playing…") :
+                                           t.ftSendBtn}
+                </div>
+                <div className="ft-mic-hint">{t.ftInputHint}</div>
+              </div>
+            </div>
+            <div className="ft-latency font-mono">
+              {ko ? "예상 응답 지연" : "Latency"} <span>~820ms</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* hidden audio for TTS */}
+      <audio ref={audioRef} style={{ display: "none" }} />
+
+      {/* Report overlay */}
+      {showReport && (
+        reportPhase === "generating" ? (
+          <div className="report-overlay">
+            <div className="report-generating-box">
+              <div className="rg-spinner" />
+              <p className="rg-label">{ko ? "리포트를 생성하고 있습니다…" : "Generating your report…"}</p>
+              <p className="rg-sub">{ko ? "Qwen3가 대화를 분석 중입니다." : "Qwen3 is analyzing your conversation."}</p>
+            </div>
+          </div>
+        ) : reportData ? (
+          <ReportModal report={reportData} lang={lang} sessionId={sessionId} onClose={() => setShowReport(false)} />
+        ) : null
+      )}
+    </div>
+  );
+}
+
+// ===== PlaygroundPage =====
+function PlaygroundPage({ t, lang }) {
+  const [tab, setTab] = useStateP("talk");
+  return (
+    <React.Fragment>
+      <PageHeader
+        eyebrow={t.pgPageTitle}
+        title={tab === "talk" ? t.pgTalkTitle : t.pgPronTitle}
+        sub={tab === "talk" ? t.pgTalkSub : t.pgPronSub}
+      />
+      <section style={{ paddingTop: 0 }}>
+        <div className="container">
+          <BackendStatusBadge lang={lang} />
+          <div className="pg-tabs">
+            <button className={`pg-tab ${tab === "talk" ? "active" : ""}`} onClick={() => setTab("talk")}>
+              <Icon name="chat" size={16}/>{t.playgroundTabTalk}
+            </button>
+            <button className={`pg-tab ${tab === "pron" ? "active" : ""}`} onClick={() => setTab("pron")}>
+              <Icon name="waveform" size={16}/>{t.playgroundTabPron}
+            </button>
+          </div>
+          {tab === "talk" ? <FreeTalkDemo t={t} lang={lang} /> : <PronDemo t={t} lang={lang} />}
+        </div>
+      </section>
+    </React.Fragment>
+  );
+}
+
+Object.assign(window, { PlaygroundPage });
