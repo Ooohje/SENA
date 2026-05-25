@@ -42,7 +42,7 @@ window.SENA_API.scorePronunciation = async function (audioBlob, reference, lang 
       if (!r.ok) throw new Error(`Score API ${r.status}`);
       return await r.json();
     } catch (e) {
-      _serverOfflineAlert(lang);
+      if (e instanceof TypeError || e.name === "AbortError") _serverOfflineAlert(lang);
       throw e;
     }
   }
@@ -78,7 +78,7 @@ window.SENA_API.chatTurn = async function ({ level, topic, history, audioBlob, l
       if (!r.ok) throw new Error(`Chat API ${r.status}`);
       return await r.json();
     } catch (e) {
-      _serverOfflineAlert(lang);
+      if (e instanceof TypeError || e.name === "AbortError") _serverOfflineAlert(lang);
       throw e;
     }
   }

@@ -29,10 +29,14 @@ function useServerStatus() {
   useEffectP(() => {
     let cancelled = false;
     async function check() {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 4000);
       try {
-        const r = await fetch(window.SENA_CONFIG.backendUrl + "/health", { signal: AbortSignal.timeout(4000) });
+        const r = await fetch(window.SENA_CONFIG.backendUrl + "/health", { signal: ctrl.signal });
+        clearTimeout(timer);
         if (!cancelled) setStatus(r.ok ? "online" : "offline");
       } catch {
+        clearTimeout(timer);
         if (!cancelled) setStatus("offline");
       }
     }
