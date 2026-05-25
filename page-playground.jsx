@@ -22,53 +22,6 @@ function fmt(sec) {
   return `${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}.${String(ms).padStart(2, "0")}`;
 }
 
-// ===== BackendConfigBanner =====
-function BackendConfigBanner({ lang }) {
-  const ko = lang === "ko";
-  const [url, setUrl] = useStateP(() => {
-    try { return localStorage.getItem("sena_backend") || ""; } catch { return ""; }
-  });
-  const [editing, setEditing] = useStateP(false);
-  const [input, setInput] = useStateP(url);
-  const connected = !!url;
-
-  function save() {
-    const v = input.replace(/\/$/, "").trim();
-    try { if (v) localStorage.setItem("sena_backend", v); else localStorage.removeItem("sena_backend"); } catch {}
-    setUrl(v);
-    setEditing(false);
-  }
-  function clear() {
-    try { localStorage.removeItem("sena_backend"); } catch {}
-    setUrl(""); setInput(""); setEditing(false);
-  }
-
-  return (
-    <div className={`backend-banner ${connected ? "bb-connected" : "bb-mock"}`}>
-      <span className="bb-dot" />
-      <span className="bb-label">
-        {connected ? (ko ? "백엔드 연결됨" : "Backend connected") : (ko ? "Mock 모드" : "Mock mode")}
-      </span>
-      {connected && !editing && (
-        <span className="bb-url">{url.length > 44 ? url.slice(0, 44) + "…" : url}</span>
-      )}
-      {editing ? (
-        <>
-          <input className="bb-input" value={input} onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
-            placeholder="https://xxxx.ngrok-free.app" autoFocus />
-          <button className="bb-btn" onClick={save}>{ko ? "저장" : "Save"}</button>
-          <button className="bb-btn bb-btn-ghost" onClick={() => setEditing(false)}>{ko ? "취소" : "Cancel"}</button>
-          {connected && <button className="bb-btn bb-btn-danger" onClick={clear}>{ko ? "초기화" : "Clear"}</button>}
-        </>
-      ) : (
-        <button className="bb-btn bb-btn-ghost" onClick={() => { setInput(url); setEditing(true); }}>
-          {connected ? (ko ? "변경" : "Change") : (ko ? "URL 설정" : "Set URL")}
-        </button>
-      )}
-    </div>
-  );
-}
 
 // ===== ReportModal =====
 function ReportModal({ report, lang, sessionId, onClose }) {
@@ -682,8 +635,7 @@ function PlaygroundPage({ t, lang }) {
       />
       <section style={{ paddingTop: 0 }}>
         <div className="container">
-          <BackendConfigBanner lang={lang} />
-          <div className="pg-tabs">
+<div className="pg-tabs">
             <button className={`pg-tab ${tab === "talk" ? "active" : ""}`} onClick={() => setTab("talk")}>
               <Icon name="chat" size={16}/>{t.playgroundTabTalk}
             </button>

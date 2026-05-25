@@ -19,7 +19,8 @@ import soundfile as sf
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from docx import Document
@@ -151,7 +152,14 @@ class TTSEngine:
 
     def __init__(self):
         print("[TTS] loading Kokoro…")
-        self.pipe = _KokoroPipeline(lang_code="a")   # 'a' = American English
+        try:
+            self.pipe = _KokoroPipeline(lang_code="a")
+        except RuntimeError as e:
+            if "CUDA" in str(e):
+                print("[TTS] CUDA not supported for Kokoro on this GPU → falling back to CPU")
+                self.pipe = _KokoroPipeline(lang_code="a", device="cpu")
+            else:
+                raise
         print("[TTS] ✅ ready")
 
     def synth_b64(self, text: str) -> str:
@@ -364,6 +372,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Frontend static files ──────────────────────────────────────────────────────
+FRONTEND_DIR = PROJ_ROOT  # HTML/JS/CSS files are at the project root
+
+@app.get("/")
+async def root():
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+@app.get("/{page}.html")
+async def page(page: str):
+    f = FRONTEND_DIR / f"{page}.html"
+    if not f.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(f)
+
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

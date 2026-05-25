@@ -1,24 +1,8 @@
 // SENA — Frontend ↔ Backend adapter
-//
-// ★ 고정 백엔드 URL: ngrok 무료 고정 도메인을 아래에 입력하면
-//   모든 방문자가 자동으로 실제 백엔드에 연결됩니다.
-//   비워두면 Mock 모드로 동작합니다.
-const FIXED_BACKEND = "";  // 예: "https://sena-xyz.ngrok-free.app"
-
-(function () {
-  try {
-    const p = new URLSearchParams(location.search).get("backend");
-    if (p) localStorage.setItem("sena_backend", p.replace(/\/$/, ""));
-  } catch (_) {}
-})();
+const FIXED_BACKEND = "http://155.230.43.22:8000";
 
 function _base() {
-  // 우선순위: localStorage > FIXED_BACKEND > "" (Mock)
-  try {
-    const local = (localStorage.getItem("sena_backend") || "").replace(/\/$/, "");
-    if (local) return local;
-  } catch (_) {}
-  return (FIXED_BACKEND || "").replace(/\/$/, "");
+  return FIXED_BACKEND;
 }
 
 window.SENA_CONFIG = {
@@ -163,8 +147,8 @@ window.SENA_API.downloadReport = async function (sessionId, lang) {
     return;
   }
   alert(lang === "ko"
-    ? "백엔드 서버가 연결되면 Word 파일을 다운로드할 수 있습니다.\n상단 백엔드 URL 설정에서 ngrok 주소를 입력해주세요."
-    : "Connect the backend server to download the Word report.\nEnter your ngrok URL in the backend config at the top.");
+    ? "백엔드 서버가 실행 중이지 않습니다. start.bat을 먼저 실행해주세요."
+    : "Backend server is not running. Please run start.bat first.");
 };
 
 // ── MediaRecorder wrapper ────────────────────────────────────────────────────
