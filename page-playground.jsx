@@ -23,6 +23,44 @@ function fmt(sec) {
 }
 
 
+// ===== BackendStatusBadge =====
+function BackendStatusBadge({ lang }) {
+  const ko = lang === "ko";
+  const [status, setStatus] = useStateP("checking"); // checking | online | offline
+
+  useEffectP(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const r = await fetch(window.SENA_CONFIG.backendUrl + "/health", { signal: AbortSignal.timeout(4000) });
+        if (!cancelled) setStatus(r.ok ? "online" : "offline");
+      } catch {
+        if (!cancelled) setStatus("offline");
+      }
+    }
+    check();
+    const id = setInterval(check, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const dot   = status === "online" ? "#10B981" : status === "offline" ? "#EF4444" : "#F59E0B";
+  const label = status === "online"
+    ? (ko ? "서버 연결됨" : "Server online")
+    : status === "offline"
+    ? (ko ? "서버 연결 안 됨" : "Server offline")
+    : (ko ? "연결 확인 중…" : "Checking…");
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12,
+                  color: "var(--fg-faint)", marginBottom: 16 }}>
+      <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot,
+                     boxShadow: `0 0 6px ${dot}`, display: "inline-block",
+                     animation: status === "checking" ? "pulse-dot 1.2s infinite" : "none" }} />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 // ===== ReportModal =====
 function ReportModal({ report, lang, sessionId, onClose }) {
   const ko = lang === "ko";
@@ -635,7 +673,8 @@ function PlaygroundPage({ t, lang }) {
       />
       <section style={{ paddingTop: 0 }}>
         <div className="container">
-<div className="pg-tabs">
+          <BackendStatusBadge lang={lang} />
+          <div className="pg-tabs">
             <button className={`pg-tab ${tab === "talk" ? "active" : ""}`} onClick={() => setTab("talk")}>
               <Icon name="chat" size={16}/>{t.playgroundTabTalk}
             </button>
@@ -643,7 +682,7 @@ function PlaygroundPage({ t, lang }) {
               <Icon name="waveform" size={16}/>{t.playgroundTabPron}
             </button>
           </div>
-          {tab === "talk" ? <FreeTalkDemo t={t} lang={lang}/> : <PronDemo t={t} lang={lang}/>}
+          {tab === "talk" ? <FreeTalkDemo t={t} lang={lang} /> : <PronDemo t={t} lang={lang} />}
         </div>
       </section>
     </React.Fragment>
