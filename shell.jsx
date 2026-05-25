@@ -81,7 +81,7 @@ function Nav({ lang, setLang, t, current }) {
     <nav className="nav">
       <div className="container nav-inner">
         <a href="index.html" className="brand-mark">
-          <div className="brand-logo"></div>
+          <img src="/sena_logo.png" alt="SENA" style={{ width: 32, height: 32, objectFit: "contain" }} />
           <div>
             <div className="brand-name">SENA</div>
             <div className="brand-sub">{t.brand}</div>
