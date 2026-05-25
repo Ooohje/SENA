@@ -1,11 +1,12 @@
 @echo off
-title SENA Backend Server
+title SENA Backend
 cd /d "%~dp0"
+chcp 65001 >nul
 
 echo.
-echo ============================================
-echo   SENA Backend Server
-echo ============================================
+echo ========================================
+echo   SENA Backend
+echo ========================================
 echo.
 
 python --version >nul 2>&1
@@ -15,6 +16,8 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 echo [OK] Python found
+
+taskkill /F /IM cloudflared.exe >nul 2>&1
 
 curl -s --max-time 2 http://localhost:11434 >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
@@ -39,18 +42,19 @@ if %ERRORLEVEL% NEQ 0 (
 echo [OK] qwen3:8b ready
 
 echo.
-echo ============================================
-echo   Server : http://0.0.0.0:8000
-echo   API docs : http://localhost:8000/docs
-echo ============================================
+echo [1/2] FastAPI server starting in a new window...
+start "SENA - FastAPI Server" python main.py
+
+echo [2/2] Cloudflare Tunnel starting...
 echo.
-echo Keep this window open while the server is running.
-echo Ctrl+C to stop.
+echo ===================================================
+echo   Copy the HTTPS address below into your browser
+echo   (wait a moment for it to appear)
+echo ===================================================
 echo.
 
-python main.py
+cloudflared tunnel --url http://localhost:8000 --no-autoupdate
 
 echo.
-echo [INFO] Server stopped.
-echo If you saw an error, run install.bat first.
+echo [INFO] Tunnel stopped. Close the FastAPI window too.
 pause

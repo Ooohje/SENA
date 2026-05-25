@@ -1,5 +1,6 @@
 // SENA — Frontend ↔ Backend adapter
-const FIXED_BACKEND = "http://155.230.43.22:8000";
+// Empty string = same-origin (works with Cloudflare Tunnel HTTPS URL)
+const FIXED_BACKEND = "";
 
 function _base() {
   return FIXED_BACKEND;
@@ -14,7 +15,7 @@ function _serverOfflineAlert(lang) {
 
 window.SENA_CONFIG = {
   get backendUrl()     { return _base(); },
-  get useRealBackend() { return !!_base(); },
+  get useRealBackend() { return true; },
   endpoints: {
     score:          "/api/v1/score",
     chatTurn:       "/api/v1/chat/turn",
