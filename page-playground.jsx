@@ -24,10 +24,11 @@ function fmt(sec) {
 
 
 // ===== useServerStatus hook =====
-function useServerStatus() {
+function useServerStatus(tick) {
   const [status, setStatus] = useStateP("checking");
   useEffectP(() => {
     let cancelled = false;
+    setStatus("checking");
     async function check() {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 4000);
@@ -43,12 +44,12 @@ function useServerStatus() {
     check();
     const id = setInterval(check, 15000);
     return () => { cancelled = true; clearInterval(id); };
-  }, []);
+  }, [tick]);
   return status;
 }
 
 // ===== BackendStatusBadge =====
-function BackendStatusBadge({ lang, status }) {
+function BackendStatusBadge({ lang, status, onConfigClick }) {
   const ko = lang === "ko";
   const dot   = status === "online" ? "#10B981" : status === "offline" ? "#EF4444" : "#F59E0B";
   const label = status === "online"
@@ -57,12 +58,77 @@ function BackendStatusBadge({ lang, status }) {
     ? (ko ? "서버 연결 안 됨" : "Server offline")
     : (ko ? "연결 확인 중…" : "Checking…");
 
+  const savedUrl = window.SENA_API.getBackendUrl();
+
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12,
-                  color: "var(--fg-faint)", marginBottom: 16 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12,
+                  color: "var(--fg-faint)", marginBottom: 16, flexWrap: "wrap" }}>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot,
-                     boxShadow: `0 0 6px ${dot}`, display: "inline-block" }} />
+                     boxShadow: `0 0 6px ${dot}`, display: "inline-block", flexShrink: 0 }} />
       <span>{label}</span>
+      {savedUrl && (
+        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10.5,
+                       opacity: 0.55, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {savedUrl}
+        </span>
+      )}
+      <button onClick={onConfigClick} style={{
+        marginLeft: 4, padding: "2px 10px", fontSize: 11, borderRadius: 4,
+        border: "1px solid var(--border)", background: "var(--surface)",
+        color: "var(--fg-faint)", cursor: "pointer", lineHeight: 1.6,
+      }}>
+        {ko ? "주소 설정" : "Set URL"}
+      </button>
+    </div>
+  );
+}
+
+// ===== BackendUrlModal =====
+function BackendUrlModal({ lang, onClose, onSave }) {
+  const ko = lang === "ko";
+  const [url, setUrl] = useStateP(() => window.SENA_API.getBackendUrl() || "");
+
+  function save() {
+    window.SENA_API.setBackendUrl(url);
+    onSave();
+    onClose();
+  }
+  function clear() {
+    window.SENA_API.setBackendUrl("");
+    setUrl("");
+    onSave();
+    onClose();
+  }
+
+  return (
+    <div className="report-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="url-modal">
+        <div className="url-modal-head">
+          <span className="url-modal-title">{ko ? "백엔드 서버 주소 설정" : "Set Backend URL"}</span>
+          <button className="report-close-btn" onClick={onClose}>✕</button>
+        </div>
+        <p className="url-modal-desc">
+          {ko
+            ? "start.bat 실행 후 터미널에 표시된 Cloudflare 주소를 입력하세요.\n같은 주소로 접속 중이라면 비워두세요 (same-origin)."
+            : "Enter the Cloudflare URL shown in the terminal after running start.bat.\nLeave empty if you are already accessing the site via that URL (same-origin)."}
+        </p>
+        <input
+          className="url-modal-input"
+          type="url"
+          placeholder="https://xxxx.trycloudflare.com"
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") save(); }}
+          autoFocus
+        />
+        <div className="url-modal-foot">
+          <button className="btn-ghost" onClick={clear}>{ko ? "초기화" : "Clear"}</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-ghost" onClick={onClose}>{ko ? "취소" : "Cancel"}</button>
+            <button className="url-save-btn" onClick={save}>{ko ? "저장" : "Save"}</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -562,8 +628,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
     setReportPhase("generating");
     setShowReport(true);
     try {
-      const history = messages.map(m => ({ role: m.who === "ai" ? "assistant" : "user", content: m.text }));
-      const res = await window.SENA_API.generateReport({ history, lang });
+      const res = await window.SENA_API.generateReport({ history: messages, lang });
       setSessionId(res.sessionId);
       setReportData(res.report);
       setReportPhase("done");
@@ -735,7 +800,12 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
 // ===== PlaygroundPage =====
 function PlaygroundPage({ t, lang }) {
   const [tab, setTab] = useStateP("talk");
-  const serverStatus = useServerStatus();
+  const [urlTick, setUrlTick] = useStateP(0);
+  const [showUrlModal, setShowUrlModal] = useStateP(false);
+  const serverStatus = useServerStatus(urlTick);
+
+  function onUrlSaved() { setUrlTick(n => n + 1); }
+
   return (
     <React.Fragment>
       <PageHeader
@@ -745,7 +815,7 @@ function PlaygroundPage({ t, lang }) {
       />
       <section style={{ paddingTop: 0 }}>
         <div className="container">
-          <BackendStatusBadge lang={lang} status={serverStatus} />
+          <BackendStatusBadge lang={lang} status={serverStatus} onConfigClick={() => setShowUrlModal(true)} />
           <div className="pg-tabs">
             <button className={`pg-tab ${tab === "talk" ? "active" : ""}`} onClick={() => setTab("talk")}>
               <Icon name="chat" size={16}/>{t.playgroundTabTalk}
@@ -759,6 +829,9 @@ function PlaygroundPage({ t, lang }) {
             : <PronDemo t={t} lang={lang} serverStatus={serverStatus} />}
         </div>
       </section>
+      {showUrlModal && (
+        <BackendUrlModal lang={lang} onClose={() => setShowUrlModal(false)} onSave={onUrlSaved} />
+      )}
     </React.Fragment>
   );
 }

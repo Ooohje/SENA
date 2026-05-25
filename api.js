@@ -1,9 +1,9 @@
 // SENA — Frontend ↔ Backend adapter
-// Empty string = same-origin (works with Cloudflare Tunnel HTTPS URL)
-const FIXED_BACKEND = "";
+// Base URL stored in localStorage so GitHub Pages can call local Cloudflare tunnel
 
 function _base() {
-  return FIXED_BACKEND;
+  try { return localStorage.getItem("sena_backend_url") || ""; }
+  catch { return ""; }
 }
 
 function _serverOfflineAlert(lang) {
@@ -30,6 +30,15 @@ function _rand(min, max, dec = 1) { return +(min + Math.random() * (max - min)).
 function _ep(path) { return _base() + path; }
 
 window.SENA_API = window.SENA_API || {};
+
+window.SENA_API.getBackendUrl = function () { return _base(); };
+window.SENA_API.setBackendUrl = function (url) {
+  try { localStorage.setItem("sena_backend_url", (url || "").trim().replace(/\/$/, "")); }
+  catch {}
+};
+
+// Cached mic stream — getUserMedia is only called once per page load
+let _micStream = null;
 
 // ── Pronunciation Scoring ────────────────────────────────────────────────────
 window.SENA_API.scorePronunciation = async function (audioBlob, reference, lang = "ko") {
@@ -171,16 +180,19 @@ window.SENA_API.downloadReport = async function (sessionId, lang) {
 
 // ── MediaRecorder wrapper ────────────────────────────────────────────────────
 window.SENA_API.recorder = function () {
-  let mr = null, chunks = [], stream = null;
+  let mr = null, chunks = [];
   return {
     start: async function () {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         // HTTP (non-secure context) blocks mic access — must use HTTPS or localhost
         throw new Error("MIC_INSECURE");
       }
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Reuse existing stream to avoid repeated permission prompts
+      if (!_micStream || !_micStream.active) {
+        _micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
       chunks = [];
-      mr = new MediaRecorder(stream);
+      mr = new MediaRecorder(_micStream);
       mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
       mr.start(250); // 250ms 단위로 데이터 수집 → 짧은 녹음도 데이터 보장
     },
@@ -190,9 +202,8 @@ window.SENA_API.recorder = function () {
           resolve(new Blob([], { type: "audio/webm" })); return;
         }
         mr.onstop = () => {
-          const blob = new Blob(chunks, { type: "audio/webm" });
-          if (stream) stream.getTracks().forEach(t => t.stop());
-          resolve(blob);
+          // Keep _micStream alive for next recording — don't stop tracks
+          resolve(new Blob(chunks, { type: "audio/webm" }));
         };
         mr.stop();
       });
