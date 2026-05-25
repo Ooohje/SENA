@@ -23,11 +23,9 @@ function fmt(sec) {
 }
 
 
-// ===== BackendStatusBadge =====
-function BackendStatusBadge({ lang }) {
-  const ko = lang === "ko";
-  const [status, setStatus] = useStateP("checking"); // checking | online | offline
-
+// ===== useServerStatus hook =====
+function useServerStatus() {
+  const [status, setStatus] = useStateP("checking");
   useEffectP(() => {
     let cancelled = false;
     async function check() {
@@ -42,7 +40,12 @@ function BackendStatusBadge({ lang }) {
     const id = setInterval(check, 15000);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
+  return status;
+}
 
+// ===== BackendStatusBadge =====
+function BackendStatusBadge({ lang, status }) {
+  const ko = lang === "ko";
   const dot   = status === "online" ? "#10B981" : status === "offline" ? "#EF4444" : "#F59E0B";
   const label = status === "online"
     ? (ko ? "서버 연결됨" : "Server online")
@@ -54,8 +57,7 @@ function BackendStatusBadge({ lang }) {
     <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12,
                   color: "var(--fg-faint)", marginBottom: 16 }}>
       <span style={{ width: 8, height: 8, borderRadius: "50%", background: dot,
-                     boxShadow: `0 0 6px ${dot}`, display: "inline-block",
-                     animation: status === "checking" ? "pulse-dot 1.2s infinite" : "none" }} />
+                     boxShadow: `0 0 6px ${dot}`, display: "inline-block" }} />
       <span>{label}</span>
     </div>
   );
@@ -200,7 +202,7 @@ function Gauge({ value, max = 5, label, desc, tag, tagClass, warm }) {
 }
 
 // ===== Pronunciation Demo =====
-function PronDemo({ t, lang }) {
+function PronDemo({ t, lang, serverStatus }) {
   const [state, setState] = useStateP("idle");
   const [elapsed, setElapsed] = useStateP(0);
   const elapsedRef = useRefP(0);
@@ -271,6 +273,12 @@ function PronDemo({ t, lang }) {
   };
   const tryAgain = () => { setState("idle"); setProgOrig(0); setProgAi(0); setPlayingOrig(false); setPlayingAi(false); };
   const onMicClick = () => {
+    if (serverStatus !== "online") {
+      alert(lang === "ko"
+        ? "서버에 연결되어 있지 않습니다.\nstart.bat으로 백엔드 서버를 먼저 실행해주세요."
+        : "Server is not connected.\nPlease run start.bat to start the backend server.");
+      return;
+    }
     if (state === "idle" || state === "done") startRec();
     else if (state === "recording") stopRec();
   };
@@ -380,7 +388,7 @@ function PronDemo({ t, lang }) {
 }
 
 // ===== Free Talking Demo =====
-function FreeTalkDemo({ t, lang }) {
+function FreeTalkDemo({ t, lang, serverStatus }) {
   const ko = lang === "ko";
   const [level, setLevel] = useStateP("int");
   const [topic, setTopic] = useStateP("opic");
@@ -430,6 +438,12 @@ function FreeTalkDemo({ t, lang }) {
   ];
 
   const onMicDown = async () => {
+    if (serverStatus !== "online") {
+      alert(lang === "ko"
+        ? "서버에 연결되어 있지 않습니다.\nstart.bat으로 백엔드 서버를 먼저 실행해주세요."
+        : "Server is not connected.\nPlease run start.bat to start the backend server.");
+      return;
+    }
     if (state !== "idle") return;
     setState("listening");
     setHoldTime(0);
@@ -664,6 +678,7 @@ function FreeTalkDemo({ t, lang }) {
 // ===== PlaygroundPage =====
 function PlaygroundPage({ t, lang }) {
   const [tab, setTab] = useStateP("talk");
+  const serverStatus = useServerStatus();
   return (
     <React.Fragment>
       <PageHeader
@@ -673,7 +688,7 @@ function PlaygroundPage({ t, lang }) {
       />
       <section style={{ paddingTop: 0 }}>
         <div className="container">
-          <BackendStatusBadge lang={lang} />
+          <BackendStatusBadge lang={lang} status={serverStatus} />
           <div className="pg-tabs">
             <button className={`pg-tab ${tab === "talk" ? "active" : ""}`} onClick={() => setTab("talk")}>
               <Icon name="chat" size={16}/>{t.playgroundTabTalk}
@@ -682,7 +697,9 @@ function PlaygroundPage({ t, lang }) {
               <Icon name="waveform" size={16}/>{t.playgroundTabPron}
             </button>
           </div>
-          {tab === "talk" ? <FreeTalkDemo t={t} lang={lang} /> : <PronDemo t={t} lang={lang} />}
+          {tab === "talk"
+            ? <FreeTalkDemo t={t} lang={lang} serverStatus={serverStatus} />
+            : <PronDemo t={t} lang={lang} serverStatus={serverStatus} />}
         </div>
       </section>
     </React.Fragment>
