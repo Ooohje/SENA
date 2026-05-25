@@ -178,7 +178,7 @@ window.SENA_API.recorder = function () {
         chunks = [];
         mr = new MediaRecorder(stream);
         mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-        mr.start();
+        mr.start(250); // 250ms 단위로 데이터 수집 → 짧은 녹음도 데이터 보장
       } catch (e) {
         console.warn("[SENA] mic unavailable:", e.message);
         stream = null;

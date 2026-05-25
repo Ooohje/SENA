@@ -83,7 +83,8 @@ class SpeechEvaluator:
     PAD     = 16_000 // 4  # 250 ms
 
     def __init__(self):
-        self.dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # RTX 5070 Ti (Blackwell sm_120) not yet supported by PyTorch CUDA kernels → CPU
+        self.dev = torch.device("cpu")
         print(f"[Evaluator] backbone={BACKBONE}  device={self.dev}")
 
         self.processor = AutoFeatureExtractor.from_pretrained(BACKBONE)
@@ -93,7 +94,7 @@ class SpeechEvaluator:
             "snakers4/silero-vad", "silero_vad", force_reload=False
         )
         self.get_ts = utils[0]
-        self.vad.to(self.dev)
+        self.vad.to("cpu")  # Silero VAD stays on CPU (RTX 5070 Ti sm_120 not supported)
 
         print(f"[Evaluator] loading weights from {WEIGHTS}…")
         self.model = MultiTaskAudioRegression().to(self.dev)
@@ -104,7 +105,7 @@ class SpeechEvaluator:
     def _preprocess(self, path: str) -> np.ndarray:
         wav, _ = librosa.load(path, sr=self.SR, mono=True, dtype=np.float32)
         wav    = librosa.util.normalize(wav).astype(np.float32)
-        t      = torch.from_numpy(wav).to(self.dev)
+        t      = torch.from_numpy(wav)  # VAD always runs on CPU
         ts     = self.get_ts(t, self.vad, sampling_rate=self.SR, threshold=0.5)
         if ts:
             s   = max(0, ts[0]["start"] - self.PAD)
