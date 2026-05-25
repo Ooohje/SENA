@@ -266,19 +266,37 @@ function PronDemo({ t, lang, serverStatus }) {
   const startRec = async () => {
     elapsedRef.current = 0; setElapsed(0); setState("recording");
     recorderRef.current = window.SENA_API.recorder();
-    await recorderRef.current.start();
+    try {
+      await recorderRef.current.start();
+    } catch (e) {
+      setState("idle");
+      if (e.message === "MIC_INSECURE") {
+        alert(lang === "ko"
+          ? "마이크 접근을 위해 HTTPS 또는 localhost로 접속해야 합니다.\n\nhttp://localhost:8000 으로 접속해주세요."
+          : "Mic access requires HTTPS or localhost.\n\nPlease open http://localhost:8000 instead.");
+      } else {
+        alert(lang === "ko"
+          ? "마이크 접근이 거부되었습니다. 브라우저 설정에서 마이크 권한을 허용해주세요."
+          : "Microphone access denied. Please allow mic permission in your browser settings.");
+      }
+    }
   };
   const stopRec = async () => {
     setState("processing");
     try {
       const blob = await recorderRef.current.stop();
-      if (!blob || blob.size === 0) throw new Error("No audio captured");
+      if (!blob || blob.size === 0) throw new Error("empty");
       const result = await window.SENA_API.scorePronunciation(blob, t.sentence, lang);
       setScores({ art: result.articulation, pro: result.prosody, overall: result.overall });
       setFeedbackList(result.feedback);
       setState("done");
     } catch (e) {
       setState("idle");
+      if (e.message !== "empty" && !(e instanceof TypeError)) {
+        alert(lang === "ko"
+          ? "평가 중 오류가 발생했습니다. 서버 상태를 확인해주세요."
+          : "An error occurred during evaluation. Please check server status.");
+      }
     }
   };
   const tryAgain = () => { setState("idle"); setProgOrig(0); setProgAi(0); setPlayingOrig(false); setPlayingAi(false); };
@@ -459,7 +477,21 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
     setHoldTime(0);
     holdRef.current = setInterval(() => setHoldTime(h => h + 0.1), 100);
     recorderRef.current = window.SENA_API.recorder();
-    await recorderRef.current.start();
+    try {
+      await recorderRef.current.start();
+    } catch (e) {
+      clearInterval(holdRef.current);
+      setState("idle");
+      if (e.message === "MIC_INSECURE") {
+        alert(lang === "ko"
+          ? "마이크 접근을 위해 HTTPS 또는 localhost로 접속해야 합니다.\n\nhttp://localhost:8000 으로 접속해주세요."
+          : "Mic access requires HTTPS or localhost.\n\nPlease open http://localhost:8000 instead.");
+      } else {
+        alert(lang === "ko"
+          ? "마이크 접근이 거부되었습니다. 브라우저 설정에서 마이크 권한을 허용해주세요."
+          : "Microphone access denied. Please allow mic permission in browser settings.");
+      }
+    }
   };
 
   const onMicUp = async () => {

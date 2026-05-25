@@ -173,16 +173,15 @@ window.SENA_API.recorder = function () {
   let mr = null, chunks = [], stream = null;
   return {
     start: async function () {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        chunks = [];
-        mr = new MediaRecorder(stream);
-        mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
-        mr.start(250); // 250ms 단위로 데이터 수집 → 짧은 녹음도 데이터 보장
-      } catch (e) {
-        console.warn("[SENA] mic unavailable:", e.message);
-        stream = null;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        // HTTP (non-secure context) blocks mic access — must use HTTPS or localhost
+        throw new Error("MIC_INSECURE");
       }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      mr = new MediaRecorder(stream);
+      mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mr.start(250); // 250ms 단위로 데이터 수집 → 짧은 녹음도 데이터 보장
     },
     stop: function () {
       return new Promise(resolve => {
