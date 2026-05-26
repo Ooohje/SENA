@@ -53,7 +53,7 @@ echo   (wait a moment for it to appear)
 echo ===================================================
 echo.
 
-cloudflared tunnel --url http://localhost:8000 --no-autoupdate
+cloudflared tunnel --url http://127.0.0.1:8000 --no-autoupdate --protocol http2
 
 echo.
 echo [INFO] Tunnel stopped. Close the FastAPI window too.
