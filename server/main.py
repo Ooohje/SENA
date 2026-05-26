@@ -204,22 +204,24 @@ async def _ollama(messages: list, think: bool = False, max_tokens: int = 400) ->
         return _strip_think(r.json()["message"]["content"])
 
 _LEVELS = {"beg": "beginner", "int": "intermediate", "adv": "advanced"}
-_TOPICS = {
-    "opic":      "OPIc speaking exam preparation",
-    "free":      "free conversation",
-    "biz":       "business English",
-    "travel":    "travel situations",
-    "interview": "English job interview",
-    "daily":     "daily life",
+_TOPIC_STYLE = {
+    "opic":      "Ask the learner to describe personal experiences, routines, and opinions — the kind of open-ended questions used in spoken English assessments.",
+    "free":      "Have a relaxed, casual chat about whatever is on the learner's mind.",
+    "biz":       "Simulate professional workplace situations: status updates, meetings, emails, negotiations.",
+    "travel":    "Roleplay travel situations: airports, hotels, asking for directions, ordering food.",
+    "interview": "Conduct a natural English job interview: background, strengths, experience, goals.",
+    "daily":     "Chat about everyday topics: food, hobbies, weekend plans, daily routines.",
 }
 
 def _chat_system(level: str, topic: str) -> str:
+    style = _TOPIC_STYLE.get(topic, _TOPIC_STYLE["free"])
     return (
         f"You are SENA, a friendly AI English tutor for Korean learners. "
-        f"The learner's level is {_LEVELS.get(level,'intermediate')} and "
-        f"today's topic is {_TOPICS.get(topic,'free conversation')}. "
+        f"The learner's level is {_LEVELS.get(level, 'intermediate')}. "
+        f"{style} "
         "Respond in natural, clear English. Keep each reply to 2-3 sentences "
-        "and always end with one engaging follow-up question. "
+        "and always end with one short, engaging follow-up question. "
+        "Do NOT announce the topic name or exam name. "
         "Do not use markdown or bullet points."
     )
 
