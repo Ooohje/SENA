@@ -27,7 +27,7 @@ window.SENA_I18N = {
     homeBigCtaTitle: "당신의 학원에 SENA를 적용해볼 준비가 되셨나요?",
     homeBigCtaSub: "학원 규모·도입 시점을 알려주시면 맞춤 제안으로 회신드립니다.",
     homeBigCtaA: "도입 상담",
-    homeBigCtaB: "델모 체험",
+    homeBigCtaB: "데모 체험",
 
     pageSolution: "솔루션",
     pageFeatures: "AI 기능",
@@ -48,7 +48,7 @@ window.SENA_I18N = {
     feat2ExampleTitle: "채점 결과 예시",
     feat2ExScoreA: "Articulation",
     feat2ExScoreP: "Prosody",
-    feat2ExNote1: "/s/ 손이 약갈함 · 혐끝 위치 조정",
+    feat2ExNote1: "/s/ 치찰음이 약함 · 혀끝 위치 조정",
     feat2ExNote2: "‘shore’ 강세 평탄 · 모음 길이 +0.15s",
 
     techBlock1Title: "프리토킹 파이프라인",
@@ -89,7 +89,7 @@ window.SENA_I18N = {
     feat1Item1: "레벨별 어휘·문법 자동 조절",
     feat1Item2: "시스템 프롬프트 자동 주입",
     feat1Item3: "자체 GPU 구동 · Qwen3-8B 파인튜닝",
-    feat1Item4: "실시간 터널 이어좜기 (Latency < 1s)",
+    feat1Item4: "실시간 턴 이어받기 (Latency < 1s)",
 
     feat2Tag: "FEATURE 02",
     feat2Title: "AI 발화 평가",
