@@ -1,5 +1,12 @@
 // SENA — Frontend ↔ Backend adapter
-// Base URL stored in localStorage so GitHub Pages can call local Cloudflare tunnel
+// Base URL: first checks ?api= query param (shareable link), then localStorage
+
+(function () {
+  try {
+    const param = new URLSearchParams(location.search).get("api");
+    if (param) localStorage.setItem("sena_backend_url", param.trim().replace(/\/$/, ""));
+  } catch {}
+})();
 
 function _base() {
   try { return localStorage.getItem("sena_backend_url") || ""; }

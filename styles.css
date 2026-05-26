@@ -71,7 +71,8 @@ body {
 }
 
 .page { position: relative; z-index: 1; }
-.container { max-width: var(--maxw); margin: 0 auto; padding: 0 64px; }
+.container { max-width: var(--maxw); margin: 0 auto; padding: 0 80px; }
+@media (max-width: 1200px) { .container { padding: 0 56px; } }
 @media (max-width: 1024px) { .container { padding: 0 40px; } }
 @media (max-width: 640px)  { .container { padding: 0 20px; } }
 
@@ -1034,12 +1035,12 @@ footer.site-footer {
 .page-crumb a:hover { color: var(--cyan-ink); }
 .page-crumb .active { color: var(--cyan-ink); }
 .page-h1 {
-  font-size: clamp(36px, 5vw, 60px); font-weight: 600;
-  letter-spacing: -0.03em; line-height: 1.05; margin: 0;
+  font-size: clamp(30px, 4.5vw, 56px); font-weight: 600;
+  letter-spacing: -0.03em; line-height: 1.15; margin: 0;
   color: var(--fg-strong);
-  max-width: 22ch;
+  word-break: keep-all; overflow-wrap: break-word;
 }
-.page-sub { color: var(--fg-dim); font-size: 17px; line-height: 1.6; margin: 18px 0 0; max-width: 64ch; }
+.page-sub { color: var(--fg-dim); font-size: 17px; line-height: 1.6; margin: 18px 0 0; max-width: 64ch; word-break: keep-all; }
 
 /* === Home features teaser === */
 .home-features { padding-top: 64px; }
@@ -1504,7 +1505,7 @@ footer.site-footer {
 
   /* Page header */
   .page-header { padding: 44px 0 24px; }
-  .page-h1 { font-size: clamp(28px, 7vw, 40px); max-width: 100%; }
+  .page-h1 { font-size: clamp(24px, 6vw, 36px); }
   .page-sub { font-size: 15px; }
   .page-crumb { margin-bottom: 16px; }
 
@@ -1908,3 +1909,29 @@ html, body { overflow-x: hidden; max-width: 100%; }
   transition: opacity .15s;
 }
 .url-save-btn:hover { opacity: .85; }
+
+.url-share-block {
+  background: var(--bg-1); border: 1px solid var(--line-strong);
+  border-radius: 10px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.url-share-label {
+  font-size: 11px; color: var(--cyan-ink);
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+.url-share-row {
+  display: flex; align-items: center; gap: 8px;
+}
+.url-share-text {
+  flex: 1; font-family: "JetBrains Mono", monospace;
+  font-size: 11.5px; color: var(--fg-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0;
+}
+.url-copy-btn {
+  flex-shrink: 0; padding: 5px 14px; border-radius: 8px; font-size: 12px;
+  font-weight: 700; background: var(--cyan); color: #fff;
+  border: none; cursor: pointer; transition: opacity .15s; white-space: nowrap;
+}
+.url-copy-btn:hover { opacity: .85; }

@@ -87,6 +87,12 @@ function BackendStatusBadge({ lang, status, onConfigClick }) {
 function BackendUrlModal({ lang, onClose, onSave }) {
   const ko = lang === "ko";
   const [url, setUrl] = useStateP(() => window.SENA_API.getBackendUrl() || "");
+  const [copied, setCopied] = useStateP(false);
+
+  const trimmed = url.trim().replace(/\/$/, "");
+  const shareLink = trimmed
+    ? `${location.origin}${location.pathname}?api=${encodeURIComponent(trimmed)}`
+    : "";
 
   function save() {
     window.SENA_API.setBackendUrl(url);
@@ -99,6 +105,13 @@ function BackendUrlModal({ lang, onClose, onSave }) {
     onSave();
     onClose();
   }
+  function copyLink() {
+    if (!shareLink) return;
+    navigator.clipboard.writeText(shareLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }
 
   return (
     <div className="report-overlay" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -109,8 +122,8 @@ function BackendUrlModal({ lang, onClose, onSave }) {
         </div>
         <p className="url-modal-desc">
           {ko
-            ? "start.bat 실행 후 터미널에 표시된 Cloudflare 주소를 입력하세요.\n같은 주소로 접속 중이라면 비워두세요 (same-origin)."
-            : "Enter the Cloudflare URL shown in the terminal after running start.bat.\nLeave empty if you are already accessing the site via that URL (same-origin)."}
+            ? "start.bat 실행 후 터미널에 표시된 Cloudflare 주소를 입력하세요."
+            : "Enter the Cloudflare URL shown in the terminal after running start.bat."}
         </p>
         <input
           className="url-modal-input"
@@ -121,6 +134,21 @@ function BackendUrlModal({ lang, onClose, onSave }) {
           onKeyDown={e => { if (e.key === "Enter") save(); }}
           autoFocus
         />
+
+        {shareLink && (
+          <div className="url-share-block">
+            <div className="url-share-label">
+              {ko ? "공유 링크 — 이 링크를 보내면 상대방도 자동으로 연결됩니다" : "Shareable link — others open this and connect automatically"}
+            </div>
+            <div className="url-share-row">
+              <span className="url-share-text">{shareLink}</span>
+              <button className="url-copy-btn" onClick={copyLink}>
+                {copied ? (ko ? "복사됨!" : "Copied!") : (ko ? "복사" : "Copy")}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="url-modal-foot">
           <button className="btn-ghost" onClick={clear}>{ko ? "초기화" : "Clear"}</button>
           <div style={{ display: "flex", gap: 8 }}>
