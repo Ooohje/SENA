@@ -533,12 +533,45 @@ function PronDemo({ t, lang, serverStatus }) {
 }
 
 // ===== Free Talking Demo =====
+const FT_OPEN = {
+  ko: {
+    opic:      (lv) => lv === "beg"
+      ? "안녕하세요! OPIc 준비를 도와드릴게요. 먼저 간단한 자기소개를 영어로 해볼까요?"
+      : lv === "adv"
+      ? "Hi! Let's do an OPIc Advanced-level warm-up. Could you walk me through a recent experience that challenged you — personally or professionally?"
+      : "Hi! Let's practice your OPIc speaking today. Could you start by telling me a little about yourself — what you do, and what you enjoy in your free time?",
+    free:      () => "Hey! I'm here to chat — in English. What's on your mind today? Anything interesting happen lately?",
+    biz:       () => "Good morning. Let's practice some business English. Imagine we're kicking off a team meeting — could you give me a quick project status update?",
+    travel:    () => "Hello! Let's practice travel English. You've just landed at an English-speaking airport. How would you introduce yourself to the immigration officer?",
+    interview: () => "Welcome. I'll be your interviewer today. Let's start with the classic — could you tell me about yourself and what brings you to this role?",
+    daily:     () => "Hi! Let's just have a casual chat in English. What did you get up to today? Anything fun or interesting?",
+  },
+  en: {
+    opic:      (lv) => lv === "beg"
+      ? "Hi! We're doing OPIc prep today. Let's start easy — can you introduce yourself in English?"
+      : lv === "adv"
+      ? "Hi! OPIc Advanced warm-up. Walk me through a recent challenge — personal or professional."
+      : "Hi! Let's practice your OPIc speaking. Tell me a little about yourself — what you do and what you enjoy.",
+    free:      () => "Hey! What's on your mind today? Let's just chat.",
+    biz:       () => "Good morning. Quick business warm-up — give me a brief status update on something you've been working on.",
+    travel:    () => "Hello! You've just arrived at an English-speaking airport. How do you introduce yourself to the immigration officer?",
+    interview: () => "Welcome. Tell me about yourself and what brings you to this role.",
+    daily:     () => "Hi! What did you get up to today — anything fun or interesting?",
+  },
+};
+
+function getOpenMsg(topic, level, lang) {
+  const map = FT_OPEN[lang] || FT_OPEN.ko;
+  const fn = map[topic] || map.opic;
+  return fn(level);
+}
+
 function FreeTalkDemo({ t, lang, serverStatus }) {
   const ko = lang === "ko";
   const [level, setLevel] = useStateP("int");
   const [topic, setTopic] = useStateP("opic");
-  const [messages, setMessages] = useStateP([
-    { who: "ai", text: t.ftMsg1AI },
+  const [messages, setMessages] = useStateP(() => [
+    { who: "ai", text: getOpenMsg("opic", "int", lang) },
   ]);
   const [state, setState] = useStateP("idle"); // idle | listening | thinking | playing
   const [holdTime, setHoldTime] = useStateP(0);
@@ -553,9 +586,11 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
   const [sessionId,   setSessionId]   = useStateP(null);
   const [showReport,  setShowReport]  = useStateP(false);
 
+  // Reset conversation whenever topic, level, or lang changes
   useEffectP(() => {
-    setMessages([{ who: "ai", text: t.ftMsg1AI }]);
-  }, [lang]);
+    setMessages([{ who: "ai", text: getOpenMsg(topic, level, lang) }]);
+    setReportPhase("idle"); setReportData(null); setSessionId(null); setShowReport(false);
+  }, [topic, level, lang]);
 
   // auto-scroll chat
   useEffectP(() => {
@@ -645,7 +680,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
 
   const reset = async () => {
     await window.SENA_API.resetChat({ level, topic, lang }).catch(() => {});
-    setMessages([{ who: "ai", text: t.ftMsg1AI }]);
+    setMessages([{ who: "ai", text: getOpenMsg(topic, level, lang) }]);
     setState("idle"); setHoldTime(0);
     setReportPhase("idle"); setReportData(null); setSessionId(null); setShowReport(false);
   };
