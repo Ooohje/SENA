@@ -570,9 +570,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
   const ko = lang === "ko";
   const [level, setLevel] = useStateP("int");
   const [topic, setTopic] = useStateP("opic");
-  const [messages, setMessages] = useStateP(() => [
-    { who: "ai", text: getOpenMsg("opic", "int", lang) },
-  ]);
+  const [messages, setMessages] = useStateP([]);
   const [state, setState] = useStateP("idle"); // idle | listening | thinking | playing
   const [holdTime, setHoldTime] = useStateP(0);
   const holdRef = useRefP(null);
@@ -588,7 +586,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
 
   // Reset conversation whenever topic, level, or lang changes
   useEffectP(() => {
-    setMessages([{ who: "ai", text: getOpenMsg(topic, level, lang) }]);
+    setMessages([]);
     setReportPhase("idle"); setReportData(null); setSessionId(null); setShowReport(false);
   }, [topic, level, lang]);
 
@@ -680,7 +678,7 @@ function FreeTalkDemo({ t, lang, serverStatus }) {
 
   const reset = async () => {
     await window.SENA_API.resetChat({ level, topic, lang }).catch(() => {});
-    setMessages([{ who: "ai", text: getOpenMsg(topic, level, lang) }]);
+    setMessages([]);
     setState("idle"); setHoldTime(0);
     setReportPhase("idle"); setReportData(null); setSessionId(null); setShowReport(false);
   };
